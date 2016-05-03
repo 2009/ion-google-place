@@ -23,11 +23,12 @@ angular.module('ion-google-place', [])
 
                     scope.locations = [];
                     var geocoder = new google.maps.Geocoder();
+                    var autocomplete = new google.maps.places.AutocompleteService();
                     var searchEventTimeout = undefined;
 
                     scope.displayCurrentLocation = false;
                     scope.currentLocation = scope.currentLocation === "true"? true:false;
-                    
+
                     if(!!navigator.geolocation && scope.currentLocation){
                         scope.displayCurrentLocation = true;
                     }
@@ -48,7 +49,7 @@ angular.module('ion-google-place', [])
                                         'Use current location',
                                     '</ion-item>',
                                     '<ion-item ng-repeat="location in locations" type="item-text-wrap" ng-click="selectLocation(location)">',
-                                        '{{location.formatted_address}}',
+                                        '{{location.description}}',
                                     '</ion-item>',
                                 '</ion-list>',
                             '</ion-content>',
@@ -64,18 +65,21 @@ angular.module('ion-google-place', [])
                     popupPromise.then(function(el){
                         var searchInputElement = angular.element(el.element.find('input'));
 
-                        scope.selectLocation = function(location){
-                            ngModel.$setViewValue(location);
-                            ngModel.$render();
-                            el.element.css('display', 'none');
-                            $ionicBackdrop.release();
-
-                            if (unbindBackButtonAction) {
-                                unbindBackButtonAction();
-                                unbindBackButtonAction = null;
-                            }
-                            scope.$emit('ionGooglePlaceSetLocation',location);
-                        };
+												// Update scope location using prediction selected by user
+												scope.selectLocation = function (prediction) {
+													 var promise = scope.getDetails(prediction);
+													 promise.then(
+															function (details) {
+																 scope.location = details;
+																 ngModel.$setViewValue(details);
+																 ngModel.$render();
+															},
+															function (error) { console.log("Error: ", error); },
+															function (update) { console.log("Notification: ", update);
+															});
+													 el.element.css('display', 'none');
+													 $ionicBackdrop.release();
+												};
 
                         scope.setCurrentLocation = function(){
                             var location = {
@@ -124,10 +128,10 @@ angular.module('ion-google-place', [])
                                 if(query.length < 3);
 
                                 var req = scope.geocodeOptions || {};
-                                req.address = query;
-                                geocoder.geocode(req, function(results, status) {
-                                    if (status == google.maps.GeocoderStatus.OK) {
-                                        scope.$apply(function(){
+                                req.input = query;
+                                autocomplete.getPlacePredictions(req, function (results, status) {
+                                    if (status == google.maps.places.PlacesServiceStatus.OK) {
+                                        scope.$apply(function () {
                                             scope.locations = results;
                                         });
                                     } else {
@@ -136,6 +140,23 @@ angular.module('ion-google-place', [])
                                 });
                             }, 350); // we're throttling the input by 350ms to be nice to google's API
                         });
+
+												// Get place details for the prediction
+												scope.getDetails = function (prediction) {
+													 var deferred = $q.defer();
+													 var placesService = new google.maps.places.PlacesService(element[0]);
+													 placesService.getDetails(
+															{'placeId' : prediction.place_id},
+															function (placeDetails, placesServiceStatus) {
+																 if (placesServiceStatus == "OK") {
+																		deferred.resolve(placeDetails);
+																 } else {
+																		deferred.reject(placesServiceStatus);
+																 }
+															}
+													 );
+													 return deferred.promise;
+												};
 
                         var onClick = function(e){
                             e.preventDefault();
