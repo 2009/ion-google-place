@@ -1,4 +1,4 @@
-.ion-google-place-container{
+.ion-google-place-container.modal{
     position: fixed;
     top: 0;
     right: 0;
